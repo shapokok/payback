@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>PayBack — Shared Expense Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0f0f13;
+    --surface: #1a1a24;
+    --surface2: #22222f;
+    --border: #2e2e40;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --green: #4ade80;
+    --red: #f87171;
+    --text: #e8e8f0;
+    --text2: #8888aa;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+  }
+
+  /* NAV */
+  nav {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Space Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -1px;
+  }
+
+  .logo span { color: var(--accent2); }
+
+  .nav-tabs {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-tab {
+    padding: 6px 16px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text2);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .nav-tab.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  /* MAIN */
+  main {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 16px;
+  }
+
+  /* FORMS */
+  .form-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  input, select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent);
+  }
+
+  input::placeholder { color: var(--text2); }
+
+  /* BUTTONS */
+  .btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .btn-primary:hover { opacity: 0.85; }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+    padding: 4px 10px;
+    font-size: 12px;
+  }
+
+  .btn-danger:hover { background: var(--red); color: white; }
+
+  .btn-sm {
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+
+  /* TAGS */
+  .tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .tag-food { background: #3a2d1a; color: #f59e0b; }
+  .tag-transport { background: #1a2d3a; color: #60a5fa; }
+  .tag-housing { background: #2d1a3a; color: #c084fc; }
+  .tag-entertainment { background: #1a3a2d; color: #34d399; }
+  .tag-other { background: #2a2a2a; color: #9ca3af; }
+
+  /* EXPENSE LIST */
+  .expense-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+
+  .expense-item:last-child { border-bottom: none; }
+
+  .expense-left { flex: 1; }
+  .expense-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+  .expense-meta { font-size: 12px; color: var(--text2); }
+  .expense-amount {
+    font-family: 'Space Mono', monospace;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  /* BALANCES */
+  .transfer-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    background: var(--surface2);
+    border-radius: 10px;
+    margin-bottom: 10px;
+  }
+
+  .transfer-arrow {
+    font-size: 12px;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .transfer-from { color: var(--red); font-weight: 600; }
+  .transfer-to { color: var(--green); font-weight: 600; }
+  .transfer-amount {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  /* NET BALANCES */
+  .net-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+
+  .net-card {
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 14px;
+    text-align: center;
+  }
+
+  .net-name { font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+  .net-amount {
+    font-family: 'Space Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .net-amount.positive { color: var(--green); }
+  .net-amount.negative { color: var(--red); }
+  .net-amount.zero { color: var(--text2); }
+
+  /* MEMBER CHIPS */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .chip {
+    padding: 4px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all .15s;
+    user-select: none;
+  }
+
+  .chip.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  /* EMPTY STATE */
+  .empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text2);
+  }
+
+  .empty-icon { font-size: 48px; margin-bottom: 12px; }
+  .empty-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .empty-sub { font-size: 14px; }
+
+  /* SETUP */
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+    text-align: center;
+    max-width: 480px;
+    margin: 80px auto;
+  }
+
+  .setup-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .setup-sub {
+    color: var(--text2);
+    font-size: 15px;
+    margin-bottom: 32px;
+  }
+
+  .setup-input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .members-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 12px 0;
+    min-height: 32px;
+  }
+
+  .member-chip {
+    padding: 4px 12px;
+    background: var(--accent);
+    border-radius: 20px;
+    font-size: 13px;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .member-chip button {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+    opacity: 0.7;
+  }
+
+  .member-chip button:hover { opacity: 1; }
+
+  /* SECTION HEADER */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .section-title {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .total-badge {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--text2);
+    background: var(--surface2);
+    padding: 4px 12px;
+    border-radius: 20px;
+  }
+
+  /* ALERT */
+  .alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-bottom: 16px;
+  }
+
+  .alert-success { background: #1a3a2d; color: var(--green); border: 1px solid #2d6b4a; }
+  .alert-error { background: #3a1a1a; color: var(--red); border: 1px solid #6b2d2d; }
+
+  /* SETTLED badge */
+  .settled-badge {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--green);
+    background: #1a3a2d;
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid #2d6b4a;
+  }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 20px 0;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script type="module">
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let state = {
+  screen: 'setup',   // 'setup' | 'expenses' | 'balances'
+  group: null,       // { name, members: [] }
+  expenses: [],      // [{ id, title, amount, paidBy, splitBetween, category, createdAt }]
+  settled: new Set(),// settled expense ids
+  alert: null,
+};
+
+// ── DEBT SIMPLIFICATION ───────────────────────────────────────────────────────
+function simplifyDebts() {
+  const net = {};
+  state.group.members.forEach(m => { net[m] = 0; });
+
+  state.expenses.forEach(exp => {
+    if (state.settled.has(exp.id)) return;
+    const share = exp.amount / exp.splitBetween.length;
+    net[exp.paidBy] = (net[exp.paidBy] || 0) + exp.amount;
+    exp.splitBetween.forEach(m => {
+      net[m] = (net[m] || 0) - share;
+    });
+  });
+
+  const creditors = [], debtors = [];
+  Object.entries(net).forEach(([name, bal]) => {
+    if (bal > 0.01) creditors.push({ name, amount: bal });
+    else if (bal < -0.01) debtors.push({ name, amount: -bal });
+  });
+
+  creditors.sort((a, b) => b.amount - a.amount);
+  debtors.sort((a, b) => b.amount - a.amount);
+
+  const transfers = [];
+  let i = 0, j = 0;
+  while (i < creditors.length && j < debtors.length) {
+    const t = Math.min(creditors[i].amount, debtors[j].amount);
+    transfers.push({ from: debtors[j].name, to: creditors[i].name, amount: Math.round(t) });
+    creditors[i].amount -= t;
+    debtors[j].amount -= t;
+    if (creditors[i].amount < 0.01) i++;
+    if (debtors[j].amount < 0.01) j++;
+  }
+
+  return { net, transfers };
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render() {
+  const app = document.getElementById('app');
+  if (state.screen === 'setup') {
+    app.innerHTML = renderSetup();
+  } else {
+    app.innerHTML = `
+      ${renderNav()}
+      <main>
+        ${state.alert ? `<div class="alert alert-${state.alert.type}">${state.alert.msg}</div>` : ''}
+        ${state.screen === 'expenses' ? renderExpenses() : renderBalances()}
+      </main>`;
+  }
+  attachHandlers();
+}
+
+function renderNav() {
+  return `
+    <nav>
+      <div class="logo">Pay<span>Back</span></div>
+      <div style="font-size:13px;color:var(--text2)">${state.group.name} · ${state.group.members.length} members</div>
+      <div class="nav-tabs">
+        <button class="nav-tab ${state.screen==='expenses'?'active':''}" data-tab="expenses">Expenses</button>
+        <button class="nav-tab ${state.screen==='balances'?'active':''}" data-tab="balances">Balances</button>
+      </div>
+    </nav>`;
+}
+
+function renderSetup() {
+  return `
+    <div class="setup-card">
+      <div class="setup-title">PayBack</div>
+      <div class="setup-sub">Split expenses with friends. No math required.</div>
+
+      <div style="text-align:left">
+        <div class="card-title" style="margin-bottom:8px">Group name</div>
+        <input id="groupName" placeholder="e.g. Vietnam Trip 2026" style="width:100%;margin-bottom:20px"/>
+
+        <div class="card-title" style="margin-bottom:8px">Add members</div>
+        <div class="setup-input-row">
+          <input id="memberInput" placeholder="Name" />
+          <button class="btn btn-primary btn-sm" id="addMemberBtn">Add</button>
+        </div>
+        <div class="members-list" id="membersList"></div>
+      </div>
+
+      <div class="divider"></div>
+      <button class="btn btn-primary" id="createGroupBtn" style="width:100%;padding:14px">
+        Create Group →
+      </button>
+    </div>`;
+}
+
+function renderExpenses() {
+  const total = state.expenses.reduce((s, e) => s + e.amount, 0);
+
+  return `
+    <div class="section-header">
+      <div class="section-title">Expenses</div>
+      <div class="total-badge">Total: ${total.toLocaleString()} ₸</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Add expense</div>
+      <div class="form-row">
+        <input id="expTitle" placeholder="What was it?" style="flex:2"/>
+        <input id="expAmount" type="number" placeholder="Amount ₸" min="1"/>
+      </div>
+      <div class="form-row">
+        <select id="expPaidBy">
+          <option value="">Paid by...</option>
+          ${state.group.members.map(m => `<option value="${m}">${m}</option>`).join('')}
+        </select>
+        <select id="expCategory">
+          <option value="food">🍔 Food</option>
+          <option value="transport">🚗 Transport</option>
+          <option value="housing">🏠 Housing</option>
+          <option value="entertainment">🎉 Entertainment</option>
+          <option value="other">📦 Other</option>
+        </select>
+      </div>
+      <div class="card-title" style="margin-bottom:8px">Split between</div>
+      <div class="chips" id="splitChips">
+        ${state.group.members.map(m =>
+          `<div class="chip selected" data-member="${m}">${m}</div>`
+        ).join('')}
+      </div>
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" id="addExpenseBtn">Add Expense</button>
+      </div>
+    </div>
+
+    ${state.expenses.length === 0 ? `
+      <div class="empty">
+        <div class="empty-icon">💸</div>
+        <div class="empty-title">No expenses yet</div>
+        <div class="empty-sub">Add your first expense above</div>
+      </div>` : `
+      <div class="card">
+        <div class="card-title">All expenses (${state.expenses.length})</div>
+        ${state.expenses.map(exp => `
+          <div class="expense-item">
+            <div class="expense-left">
+              <div class="expense-title">${exp.title}</div>
+              <div class="expense-meta">
+                Paid by <strong>${exp.paidBy}</strong> · Split: ${exp.splitBetween.join(', ')}
+                &nbsp;<span class="tag tag-${exp.category}">${exp.category}</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="expense-amount">${exp.amount.toLocaleString()} ₸</div>
+              <button class="btn btn-danger" data-delete="${exp.id}">✕</button>
+            </div>
+          </div>`).join('')}
+      </div>`}`;
+}
+
+function renderBalances() {
+  const { net, transfers } = simplifyDebts();
+  const activeExpenses = state.expenses.filter(e => !state.settled.has(e.id));
+
+  return `
+    <div class="section-header">
+      <div class="section-title">Balances</div>
+      <div class="total-badge">${transfers.length} transfer${transfers.length !== 1 ? 's' : ''} needed</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Net balance per person</div>
+      <div class="net-grid">
+        ${Object.entries(net).map(([name, bal]) => `
+          <div class="net-card">
+            <div class="net-name">${name}</div>
+            <div class="net-amount ${bal > 0.01 ? 'positive' : bal < -0.01 ? 'negative' : 'zero'}">
+              ${bal > 0.01 ? '+' : ''}${Math.round(bal).toLocaleString()} ₸
+            </div>
+            <div style="font-size:11px;color:var(--text2);margin-top:4px">
+              ${bal > 0.01 ? 'gets back' : bal < -0.01 ? 'owes' : 'settled ✓'}
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    ${transfers.length === 0 ? `
+      <div class="card">
+        <div class="empty" style="padding:24px">
+          <div class="empty-icon">✅</div>
+          <div class="empty-title">All settled up!</div>
+          <div class="empty-sub">No transfers needed</div>
+        </div>
+      </div>` : `
+      <div class="card">
+        <div class="card-title">Minimum transfers (${transfers.length})</div>
+        ${transfers.map((t, idx) => `
+          <div class="transfer-item">
+            <div class="transfer-arrow">
+              <span class="transfer-from">${t.from}</span>
+              <span>→ pays →</span>
+              <span class="transfer-to">${t.to}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="transfer-amount">${t.amount.toLocaleString()} ₸</div>
+              <div style="font-size:12px;color:var(--text2)">via Kaspi</div>
+            </div>
+          </div>`).join('')}
+      </div>`}
+
+    ${activeExpenses.length > 0 ? `
+      <div class="card">
+        <div class="card-title">Expenses in calculation (${activeExpenses.length})</div>
+        ${activeExpenses.map(exp => `
+          <div class="expense-item">
+            <div class="expense-left">
+              <div class="expense-title">${exp.title}</div>
+              <div class="expense-meta">Paid by <strong>${exp.paidBy}</strong> · ${exp.amount.toLocaleString()} ₸</div>
+            </div>
+            <span class="tag tag-${exp.category}">${exp.category}</span>
+          </div>`).join('')}
+      </div>` : ''}`;
+}
+
+// ── HANDLERS ──────────────────────────────────────────────────────────────────
+let tempMembers = [];
+
+function attachHandlers() {
+  // Setup screen
+  if (state.screen === 'setup') {
+    renderMemberChips();
+
+    document.getElementById('memberInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') addMember();
+    });
+
+    document.getElementById('addMemberBtn')?.addEventListener('click', addMember);
+
+    document.getElementById('createGroupBtn')?.addEventListener('click', () => {
+      const name = document.getElementById('groupName').value.trim();
+      if (!name) return showAlert('error', 'Please enter a group name');
+      if (tempMembers.length < 2) return showAlert('error', 'Add at least 2 members');
+      state.group = { name, members: [...tempMembers] };
+      state.screen = 'expenses';
+      render();
+    });
+  }
+
+  // Nav tabs
+  document.querySelectorAll('.nav-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.screen = btn.dataset.tab;
+      state.alert = null;
+      render();
+    });
+  });
+
+  // Split chips
+  document.querySelectorAll('.chip').forEach(chip => {
+    chip.addEventListener('click', () => chip.classList.toggle('selected'));
+  });
+
+  // Add expense
+  document.getElementById('addExpenseBtn')?.addEventListener('click', () => {
+    const title = document.getElementById('expTitle').value.trim();
+    const amount = parseFloat(document.getElementById('expAmount').value);
+    const paidBy = document.getElementById('expPaidBy').value;
+    const category = document.getElementById('expCategory').value;
+    const splitBetween = [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.member);
+
+    if (!title) return showAlert('error', 'Please enter expense title');
+    if (!amount || amount <= 0) return showAlert('error', 'Please enter a valid amount');
+    if (!paidBy) return showAlert('error', 'Please select who paid');
+    if (splitBetween.length === 0) return showAlert('error', 'Select at least one person to split with');
+
+    state.expenses.push({
+      id: Math.random().toString(36).slice(2),
+      title, amount, paidBy, category, splitBetween,
+      createdAt: new Date().toISOString()
+    });
+
+    showAlert('success', `"${title}" added — ${amount.toLocaleString()} ₸`);
+    render();
+  });
+
+  // Delete expense
+  document.querySelectorAll('[data-delete]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.delete;
+      state.expenses = state.expenses.filter(e => e.id !== id);
+      render();
+    });
+  });
+}
+
+function addMember() {
+  const input = document.getElementById('memberInput');
+  const name = input.value.trim();
+  if (!name || tempMembers.includes(name)) { input.value = ''; return; }
+  tempMembers.push(name);
+  input.value = '';
+  renderMemberChips();
+}
+
+function renderMemberChips() {
+  const list = document.getElementById('membersList');
+  if (!list) return;
+  list.innerHTML = tempMembers.map(m => `
+    <div class="member-chip">
+      ${m}
+      <button data-remove="${m}">×</button>
+    </div>`).join('');
+  list.querySelectorAll('[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      tempMembers = tempMembers.filter(m => m !== btn.dataset.remove);
+      renderMemberChips();
+    });
+  });
+}
+
+function showAlert(type, msg) {
+  state.alert = { type, msg };
+  setTimeout(() => { state.alert = null; render(); }, 3000);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
