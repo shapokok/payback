@@ -24,9 +24,9 @@ PayBack is a shared expense tracker built for groups of friends and roommates in
 ## How to Run
 
 ### Option 1: Open directly (no server needed)
-
+```bash
 open frontend/index.html
-
+```
 
 Or just double-click `frontend/index.html` in your file explorer.
 
