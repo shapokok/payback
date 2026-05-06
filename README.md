@@ -1,7 +1,5 @@
 # PayBack — Shared Expense Tracker MVP
 
----
-
 ## What is this?
 
 PayBack is a shared expense tracker built for groups of friends and roommates in Kazakhstan. This MVP tests the core hypothesis:
@@ -12,6 +10,7 @@ PayBack is a shared expense tracker built for groups of friends and roommates in
 
 ## MVP Features
 
+- User registration and login (JWT auth)
 - Create a group with custom members
 - Add expenses with split logic (split equally between any members)
 - Automatic debt simplification (greedy algorithm — minimum transfers)
@@ -23,16 +22,24 @@ PayBack is a shared expense tracker built for groups of friends and roommates in
 
 ## How to Run
 
-### Option 1: Open directly (no server needed)
+### Option 1: Docker (recommended)
+
 ```bash
-open frontend/index.html
+docker-compose up --build
 ```
 
-Or just double-click `frontend/index.html` in your file explorer.
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3001
 
-### Option 2: Local server
+### Option 2: Manual
 
 ```bash
+# Backend
+cd backend
+npm install
+node index.js
+
+# Frontend (separate terminal)
 cd frontend
 python3 -m http.server 3000
 # Open http://localhost:3000
@@ -42,18 +49,26 @@ python3 -m http.server 3000
 
 ## How to Use
 
-1. **Setup screen** — Enter group name and add at least 2 members
-2. **Expenses tab** — Add expenses: title, amount, who paid, who splits it
-3. **Balances tab** — See net balances and minimum transfers needed
+1. **Auth screen** — Register or log in
+2. **Setup screen** — Enter group name and add at least 2 members
+3. **Expenses tab** — Add expenses: title, amount, who paid, who splits it
+4. **Balances tab** — See net balances and minimum transfers needed
 
 ---
 
 ## Architecture
 
-This MVP is a single HTML file with:
-- Vanilla JS (no framework dependencies)
-- In-memory state (no backend/database required for prototype)
-- Debt simplification algorithm built-in
+```
+payback/
+├── frontend/        # Vanilla JS single-file app (nginx in Docker)
+│   └── index.html
+├── backend/         # Node.js + Express REST API
+│   ├── index.js
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yml
+└── requirements.txt
+```
 
 **Production stack** (defined in Assignments 1–3):
 - Frontend: React + Vite → Vercel
@@ -69,15 +84,14 @@ This MVP is a single HTML file with:
 | Problem | After group trips, no one knows who owes what |
 | Riskiest assumption | Users will trust automated calculations over manual tracking |
 | Hypothesis | If we show minimum transfers automatically, users will settle debts faster |
-| What MVP is NOT | No auth, no Kaspi QR, no notifications, no history |
+| What MVP is NOT | No Kaspi QR, no notifications, no history, no persistent DB |
 | How to test | Do users complete the expense → balance flow without confusion? |
 
 ---
 
 ## Tech Debt Introduced
 
-- No persistent storage (data lost on refresh)
-- No authentication (anyone can access any group)
+- No persistent storage (data lost on server restart)
 - No input sanitization beyond basic validation
 - Equal split only (no % or custom amount in prototype)
 
