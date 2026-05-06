@@ -1,11 +1,4 @@
 # PayBack — Shared Expense Tracker MVP
-
-> Assignment 4: Product Thinking & MVP Development  
-> Course: Software Development Case Study  
-> Team: Nurshapagat Shapay & Akezhan Kumar (CSE-2501M)
-
----
-
 ## What is this?
 
 PayBack is a shared expense tracker built for groups of friends and roommates in Kazakhstan. This MVP tests the core hypothesis:
@@ -16,12 +9,12 @@ PayBack is a shared expense tracker built for groups of friends and roommates in
 
 ## MVP Features
 
-- ✅ Create a group with custom members
-- ✅ Add expenses with split logic (split equally between any members)
-- ✅ Automatic debt simplification (greedy algorithm — minimum transfers)
-- ✅ Net balance view per person
-- ✅ Delete expenses
-- ✅ Category tagging (food, transport, housing, entertainment, other)
+- Create a group with custom members
+- Add expenses with split logic (split equally between any members)
+- Automatic debt simplification (greedy algorithm — minimum transfers)
+- Net balance view per person
+- Delete expenses
+- Category tagging (food, transport, housing, entertainment, other)
 
 ---
 
@@ -29,19 +22,13 @@ PayBack is a shared expense tracker built for groups of friends and roommates in
 
 ### Option 1: Open directly (no server needed)
 
-```bash
 open frontend/index.html
-```
-
-Or just double-click `frontend/index.html` in your file explorer.
 
 ### Option 2: Local server
 
-```bash
 cd frontend
 python3 -m http.server 3000
 # Open http://localhost:3000
-```
 
 ---
 
