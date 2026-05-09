@@ -460,6 +460,24 @@
     margin: 20px 0;
   }
 
+  /* GROUP CARDS */
+  .group-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: border-color .15s, color .15s;
+  }
+
+  .group-card:hover { border-color: var(--accent); color: var(--accent); }
+
   /* Scrollbar */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
@@ -476,14 +494,17 @@ const API_URL = 'http://localhost:3001';
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let state = {
-  screen: 'auth',        // 'auth' | 'setup' | 'expenses' | 'balances'
+  screen: 'auth',        // 'auth' | 'setup' | 'expenses' | 'balances' | 'join'
   authMode: 'login',     // 'login' | 'register'
   currentUser: null,     // { id, name, email }
   token: null,
   group: null,           // { id, name, members: [] }
+  groups: [],            // list of user's groups for the setup screen
   expenses: [],
   settled: new Set(),
   alert: null,
+  joinCode: null,
+  joinGroupInfo: null,
 };
 
 // ── API HELPER ────────────────────────────────────────────────────────────────
@@ -503,12 +524,13 @@ async function api(method, path, body) {
 // ── DEBT SIMPLIFICATION ───────────────────────────────────────────────────────
 function simplifyDebts() {
   const net = {};
-  state.group.members.forEach(m => { net[m] = 0; });
+  state.group.members.forEach(m => { net[m.name] = 0; });
 
   state.expenses.forEach(exp => {
     if (state.settled.has(exp.id)) return;
     const share = exp.amount / exp.splitBetween.length;
-    net[exp.paidBy] = (net[exp.paidBy] || 0) + exp.amount;
+    const payer = exp.paidByName || exp.paidBy;
+    net[payer] = (net[payer] || 0) + exp.amount;
     exp.splitBetween.forEach(m => { net[m] = (net[m] || 0) - share; });
   });
 
@@ -546,12 +568,14 @@ function render() {
     app.innerHTML = renderAuth(alertHtml);
   } else if (state.screen === 'setup') {
     app.innerHTML = renderSetup(alertHtml);
+  } else if (state.screen === 'join') {
+    app.innerHTML = renderJoin(alertHtml);
   } else {
     app.innerHTML = `
       ${renderNav()}
       <main>
         ${alertHtml}
-        ${state.screen === 'expenses' ? renderExpenses() : renderBalances()}
+        ${state.screen === 'expenses' ? renderExpenses() : state.screen === 'members' ? renderMembers() : renderBalances()}
       </main>`;
   }
   attachHandlers();
@@ -592,9 +616,11 @@ function renderNav() {
       <div class="logo">Pay<span>Back</span></div>
       <div class="nav-group-info">${state.group.name} · ${state.group.members.length} members</div>
       <div class="nav-right">
+        <button id="inviteBtn" class="btn btn-ghost btn-sm">Invite</button>
         <div class="nav-tabs">
           <button class="nav-tab ${state.screen === 'expenses' ? 'active' : ''}" data-tab="expenses">Expenses</button>
           <button class="nav-tab ${state.screen === 'balances' ? 'active' : ''}" data-tab="balances">Balances</button>
+          <button class="nav-tab ${state.screen === 'members' ? 'active' : ''}" data-tab="members">Members</button>
         </div>
         <span class="nav-user">${state.currentUser?.name}</span>
         <button id="logoutBtn" class="btn btn-ghost btn-sm">Logout</button>
@@ -603,6 +629,19 @@ function renderNav() {
 }
 
 function renderSetup(alertHtml = '') {
+  const groupsSection = state.groups.length > 0 ? `
+    <div style="margin-bottom:24px">
+      <div class="card-title" style="margin-bottom:12px">Your groups</div>
+      ${state.groups.map(g => `
+        <div class="group-card" data-group-id="${g.id}">
+          <span>${g.name}</span>
+          <span style="color:var(--text2)">→</span>
+        </div>`).join('')}
+    </div>
+    <div class="divider" style="margin:0 0 24px"></div>
+    <div class="card-title" style="margin-bottom:16px">Create new group</div>
+  ` : '';
+
   return `
     <div class="center-wrap">
       <div class="setup-card">
@@ -610,9 +649,10 @@ function renderSetup(alertHtml = '') {
           <div class="setup-title">PayBack</div>
           <button id="logoutBtn" class="btn btn-ghost btn-sm">Logout</button>
         </div>
-        <div class="setup-sub">Hi, ${state.currentUser?.name}! Create a group to get started.</div>
+        <div class="setup-sub" style="margin-bottom:24px">Hi, ${state.currentUser?.name}!</div>
 
         ${alertHtml}
+        ${groupsSection}
 
         <div style="text-align:left">
           <div class="card-title" style="margin-bottom:8px">Group name</div>
@@ -620,7 +660,7 @@ function renderSetup(alertHtml = '') {
 
           <div class="card-title" style="margin-bottom:8px">Add members</div>
           <div class="setup-input-row">
-            <input id="memberInput" placeholder="Name" />
+            <input id="memberInput" placeholder="Email or username" type="text"/>
             <button class="btn btn-primary btn-sm" id="addMemberBtn">Add</button>
           </div>
           <div class="members-list" id="membersList"></div>
@@ -652,7 +692,7 @@ function renderExpenses() {
       <div class="form-row">
         <select id="expPaidBy">
           <option value="">Paid by...</option>
-          ${state.group.members.map(m => `<option value="${m}">${m}</option>`).join('')}
+          ${state.group.members.map(m => `<option value="${m.name}">${m.name}</option>`).join('')}
         </select>
         <select id="expCategory">
           <option value="food">🍔 Food</option>
@@ -665,7 +705,7 @@ function renderExpenses() {
       <div class="card-title" style="margin-bottom:8px">Split between</div>
       <div class="chips" id="splitChips">
         ${state.group.members.map(m =>
-          `<div class="chip selected" data-member="${m}">${m}</div>`
+          `<div class="chip selected" data-member="${m.name}">${m.name}</div>`
         ).join('')}
       </div>
       <div style="margin-top:16px">
@@ -686,7 +726,7 @@ function renderExpenses() {
             <div class="expense-left">
               <div class="expense-title">${exp.title}</div>
               <div class="expense-meta">
-                Paid by <strong>${exp.paidBy}</strong> · Split: ${exp.splitBetween.join(', ')}
+                Paid by <strong>${exp.paidByName || exp.paidBy}</strong> · Split: ${exp.splitBetween.join(', ')}
                 &nbsp;<span class="tag tag-${exp.category}">${exp.category}</span>
               </div>
             </div>
@@ -755,11 +795,64 @@ function renderBalances() {
           <div class="expense-item">
             <div class="expense-left">
               <div class="expense-title">${exp.title}</div>
-              <div class="expense-meta">Paid by <strong>${exp.paidBy}</strong> · ${exp.amount.toLocaleString()} ₸</div>
+              <div class="expense-meta">Paid by <strong>${exp.paidByName || exp.paidBy}</strong> · ${exp.amount.toLocaleString()} ₸</div>
             </div>
             <span class="tag tag-${exp.category}">${exp.category}</span>
           </div>`).join('')}
       </div>` : ''}`;
+}
+
+function renderJoin(alertHtml = '') {
+  return `
+    <div class="center-wrap">
+      <div class="setup-card">
+        <div class="setup-title">PayBack</div>
+        <div class="setup-sub">You've been invited to join a group.</div>
+        ${alertHtml}
+        <div style="margin-bottom:28px">
+          <div class="card-title" style="margin-bottom:8px">Group</div>
+          <div style="font-size:22px;font-weight:700">${state.joinGroupInfo?.name || '...'}</div>
+        </div>
+        <button class="btn btn-primary" id="joinGroupBtn" style="width:100%;padding:14px">
+          Join Group →
+        </button>
+      </div>
+    </div>`;
+}
+
+function renderMembers() {
+  const isOwner = state.group.created_by && String(state.group.created_by) === String(state.currentUser?.id);
+
+  return `
+    <div class="section-header">
+      <div class="section-title">Members</div>
+      <div class="total-badge">${state.group.members.length} members</div>
+    </div>
+
+    <div class="card">
+      ${state.group.members.map(m => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:15px;font-weight:500">${m.name}</span>
+            ${m.isGuest
+              ? '<span class="tag tag-other" style="font-size:11px">guest</span>'
+              : '<span class="tag tag-transport" style="font-size:11px">member</span>'}
+          </div>
+          <div style="display:flex;gap:8px">
+            ${m.isGuest && isOwner ? `<button class="btn btn-ghost btn-sm" data-rename-guest="${m.id}" data-guest-name="${m.name}">✏️</button>` : ''}
+            ${isOwner && m.id !== String(state.currentUser?.id) ? `<button class="btn btn-danger" data-remove-member="${m.id}" data-member-name="${m.name}">✕</button>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>
+
+    ${isOwner ? `
+    <div class="card">
+      <div class="card-title">Add member</div>
+      <div class="setup-input-row">
+        <input id="addMemberGroupInput" placeholder="Email or username" type="text"/>
+        <button class="btn btn-primary btn-sm" id="addMemberGroupBtn">Add</button>
+      </div>
+    </div>` : ''}`;
 }
 
 // ── HANDLERS ──────────────────────────────────────────────────────────────────
@@ -795,8 +888,22 @@ function attachHandlers() {
         state.currentUser = data.user;
         localStorage.setItem('pb_token', data.token);
         localStorage.setItem('pb_user', JSON.stringify(data.user));
-        state.screen = 'setup';
         state.alert = null;
+        try {
+          const r = await api('GET', '/groups');
+          state.groups = r.groups;
+        } catch { state.groups = []; }
+        if (state.joinCode) {
+          try {
+            const info = await api('GET', `/groups/join/${state.joinCode}`);
+            state.joinGroupInfo = info.group;
+            state.screen = 'join';
+          } catch {
+            state.screen = 'setup';
+          }
+        } else {
+          state.screen = 'setup';
+        }
         render();
       } catch (err) {
         showAlert('error', err.message);
@@ -815,10 +922,13 @@ function attachHandlers() {
     state.token = null;
     state.currentUser = null;
     state.group = null;
+    state.groups = [];
     state.expenses = [];
     state.settled = new Set();
     state.screen = 'auth';
     state.alert = null;
+    state.joinCode = null;
+    state.joinGroupInfo = null;
     localStorage.removeItem('pb_token');
     localStorage.removeItem('pb_user');
     localStorage.removeItem('pb_group_id');
@@ -830,6 +940,21 @@ function attachHandlers() {
   if (state.screen === 'setup') {
     renderMemberChips();
 
+    document.querySelectorAll('[data-group-id]').forEach(card => {
+      card.addEventListener('click', async () => {
+        try {
+          const group = await api('GET', `/groups/${card.dataset.groupId}`);
+          state.group = group;
+          state.expenses = group.expenses || [];
+          localStorage.setItem('pb_group_id', group.id);
+          state.screen = 'expenses';
+          render();
+        } catch (err) {
+          showAlert('error', err.message);
+        }
+      });
+    });
+
     document.getElementById('memberInput')?.addEventListener('keydown', e => {
       if (e.key === 'Enter') addMember();
     });
@@ -838,12 +963,14 @@ function attachHandlers() {
     document.getElementById('createGroupBtn')?.addEventListener('click', async () => {
       const name = document.getElementById('groupName').value.trim();
       if (!name) return showAlert('error', 'Please enter a group name');
-      if (tempMembers.length < 2) return showAlert('error', 'Add at least 2 members');
+      if (tempMembers.length < 1) return showAlert('error', 'Add at least 1 member');
 
       try {
-        const group = await api('POST', '/groups', { name, members: [...tempMembers] });
+        const raw = await api('POST', '/groups', { name, members: tempMembers.map(m => ({ id: m.id, name: m.name, isGuest: m.isGuest })) });
+        const group = await api('GET', `/groups/${raw.id}`);
         state.group = group;
         state.expenses = group.expenses || [];
+        state.groups = [{ id: group.id, name: group.name }, ...state.groups];
         localStorage.setItem('pb_group_id', group.id);
         state.screen = 'expenses';
         tempMembers = [];
@@ -855,6 +982,67 @@ function attachHandlers() {
     return;
   }
 
+  // ── Join screen ───────────────────────────────────────────────────────────
+  if (state.screen === 'join') {
+    document.getElementById('joinGroupBtn')?.addEventListener('click', async () => {
+      try {
+        const data = await api('POST', `/groups/join/${state.joinCode}`);
+        const group = await api('GET', `/groups/${data.group.id}`);
+        state.group = group;
+        state.expenses = group.expenses || [];
+        localStorage.setItem('pb_group_id', group.id);
+        state.joinCode = null;
+        state.joinGroupInfo = null;
+        history.replaceState(null, '', '/');
+        state.screen = 'expenses';
+        render();
+      } catch (err) {
+        showAlert('error', err.message);
+      }
+    });
+    return;
+  }
+
+  // ── Members screen ────────────────────────────────────────────────────────
+  if (state.screen === 'members') {
+    document.getElementById('addMemberGroupBtn')?.addEventListener('click', addMemberToGroup);
+    document.getElementById('addMemberGroupInput')?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') addMemberToGroup();
+    });
+
+    document.querySelectorAll('[data-remove-member]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const memberId = btn.dataset.removeMember;
+        const memberName = btn.dataset.memberName;
+        try {
+          await api('DELETE', `/groups/${state.group.id}/members/${memberId}`);
+          state.group.members = state.group.members.filter(m => m.id !== memberId);
+          showAlert('success', `${memberName} removed`);
+        } catch (err) {
+          showAlert('error', err.message);
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-rename-guest]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const memberId = btn.dataset.renameGuest;
+        const oldName = btn.dataset.guestName;
+        const newName = prompt(`Rename "${oldName}" to:`);
+        if (!newName || newName.trim() === oldName) return;
+        try {
+          await api('PATCH', `/groups/${state.group.id}/members/guest`, { oldName, newName: newName.trim() });
+          const member = state.group.members.find(m => m.id === memberId);
+          if (member) member.name = newName.trim();
+          render();
+        } catch (err) {
+          showAlert('error', err.message);
+        }
+      });
+    });
+    return;
+  }
+
   // ── Nav tabs ──────────────────────────────────────────────────────────────
   document.querySelectorAll('.nav-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -862,6 +1050,18 @@ function attachHandlers() {
       state.alert = null;
       render();
     });
+  });
+
+  // ── Invite button ─────────────────────────────────────────────────────────
+  document.getElementById('inviteBtn')?.addEventListener('click', async () => {
+    try {
+      const data = await api('GET', `/groups/${state.group.id}/invite`);
+      const link = `${window.location.origin}/join/${data.invite_code}`;
+      await navigator.clipboard.writeText(link);
+      showAlert('success', 'Link copied!');
+    } catch {
+      showAlert('error', 'Could not copy link');
+    }
   });
 
   // ── Split chips ───────────────────────────────────────────────────────────
@@ -909,29 +1109,74 @@ function attachHandlers() {
   });
 }
 
-function addMember() {
+async function addMember() {
   const input = document.getElementById('memberInput');
-  const name = input.value.trim();
-  if (!name || tempMembers.includes(name)) { input.value = ''; return; }
-  tempMembers.push(name);
-  input.value = '';
-  renderMemberChips();
+  const q = input.value.trim();
+  if (!q) return;
+  try {
+    const { user } = await api('GET', `/users/search?q=${encodeURIComponent(q)}`);
+    if (user.id === state.currentUser.id) {
+      input.value = '';
+      return showAlert('error', 'You are already the group owner');
+    }
+    if (tempMembers.find(m => m.id === user.id)) { input.value = ''; return; }
+    tempMembers.push({ id: user.id, name: user.name, isGuest: false });
+    input.value = '';
+    renderMemberChips();
+  } catch {
+    if (tempMembers.find(m => m.name.toLowerCase() === q.toLowerCase())) { input.value = ''; return; }
+    tempMembers.push({ id: null, name: q, isGuest: true });
+    input.value = '';
+    renderMemberChips();
+  }
 }
 
 function renderMemberChips() {
   const list = document.getElementById('membersList');
   if (!list) return;
   list.innerHTML = tempMembers.map(m => `
-    <div class="member-chip">
-      ${m}
-      <button data-remove="${m}">×</button>
+    <div class="member-chip" ${m.isGuest ? 'style="background:var(--surface2);border:1px solid var(--border);color:var(--text)"' : ''}>
+      ${m.name}${m.isGuest ? ' <span style="font-size:10px;opacity:0.6">(guest)</span>' : ''}
+      <button data-remove="${m.id || m.name}">×</button>
     </div>`).join('');
   list.querySelectorAll('[data-remove]').forEach(btn => {
     btn.addEventListener('click', () => {
-      tempMembers = tempMembers.filter(m => m !== btn.dataset.remove);
+      const key = btn.dataset.remove;
+      tempMembers = tempMembers.filter(m => (m.id || m.name) !== key);
       renderMemberChips();
     });
   });
+}
+
+async function addMemberToGroup() {
+  const input = document.getElementById('addMemberGroupInput');
+  const q = input?.value.trim();
+  if (!q) return;
+
+  if (state.group.members.find(m => m.name.toLowerCase() === q.toLowerCase())) {
+    return showAlert('error', 'This person is already in the group');
+  }
+
+  try {
+    let payload;
+    try {
+      const { user } = await api('GET', `/users/search?q=${encodeURIComponent(q)}`);
+      if (state.group.members.find(m => m.id === String(user.id))) {
+        input.value = '';
+        return showAlert('error', 'This person is already in the group');
+      }
+      payload = { userId: user.id, isGuest: false };
+    } catch {
+      payload = { name: q, isGuest: true };
+    }
+    await api('POST', `/groups/${state.group.id}/members`, payload);
+    const updated = await api('GET', `/groups/${state.group.id}`);
+    state.group.members = updated.members;
+    if (input) input.value = '';
+    render();
+  } catch (err) {
+    showAlert('error', err.message);
+  }
 }
 
 function showAlert(type, msg) {
@@ -941,6 +1186,9 @@ function showAlert(type, msg) {
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
+const joinMatch = window.location.pathname.match(/^\/join\/([A-Za-z0-9]+)$/);
+if (joinMatch) state.joinCode = joinMatch[1];
+
 const savedToken = localStorage.getItem('pb_token');
 const savedUser = localStorage.getItem('pb_user');
 
@@ -948,20 +1196,34 @@ if (savedToken && savedUser) {
   state.token = savedToken;
   state.currentUser = JSON.parse(savedUser);
 
-  const savedGroupId = localStorage.getItem('pb_group_id');
-  if (savedGroupId) {
+  try {
+    const r = await api('GET', '/groups');
+    state.groups = r.groups;
+  } catch { state.groups = []; }
+
+  if (state.joinCode) {
     try {
-      const group = await api('GET', `/groups/${savedGroupId}`);
-      state.group = group;
-      state.expenses = group.expenses || [];
-      state.screen = 'expenses';
+      const info = await api('GET', `/groups/join/${state.joinCode}`);
+      state.joinGroupInfo = info.group;
+      state.screen = 'join';
     } catch {
-      // Server restarted and lost in-memory data — go to setup
-      localStorage.removeItem('pb_group_id');
       state.screen = 'setup';
     }
   } else {
-    state.screen = 'setup';
+    const savedGroupId = localStorage.getItem('pb_group_id');
+    if (savedGroupId) {
+      try {
+        const group = await api('GET', `/groups/${savedGroupId}`);
+        state.group = group;
+        state.expenses = group.expenses || [];
+        state.screen = 'expenses';
+      } catch {
+        localStorage.removeItem('pb_group_id');
+        state.screen = 'setup';
+      }
+    } else {
+      state.screen = 'setup';
+    }
   }
 }
 

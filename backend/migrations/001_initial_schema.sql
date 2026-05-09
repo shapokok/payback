@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS groups (
 
 CREATE TABLE IF NOT EXISTS group_members (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  guest_name TEXT,
   joined_at TIMESTAMPTZ DEFAULT NOW(),
   PRIMARY KEY (group_id, user_id)
 );
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS expenses (
   group_id UUID REFERENCES groups(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
   amount NUMERIC(12,2) NOT NULL,
-  paid_by UUID REFERENCES users(id),
+  paid_by TEXT NOT NULL, -- УБРАЛИ UUID и REFERENCES, теперь тут может быть и ID, и просто Имя
   category TEXT DEFAULT 'other',
   split_type TEXT DEFAULT 'equal',
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -38,7 +39,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 CREATE TABLE IF NOT EXISTS expense_splits (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   expense_id UUID REFERENCES expenses(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id),
+  user_id TEXT NOT NULL, -- Меняем UUID на TEXT и убираем REFERENCES
   amount_owed NUMERIC(12,2) NOT NULL
 );
 
