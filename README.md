@@ -65,7 +65,9 @@ payback/
 ├── backend/         # Node.js + Express REST API
 │   ├── index.js
 │   ├── package.json
-│   └── Dockerfile
+│   ├── Dockerfile
+│   └── migrations/
+│       └── 001_initial_schema.sql
 ├── docker-compose.yml
 └── requirements.txt
 ```
@@ -73,7 +75,7 @@ payback/
 **Production stack** (defined in Assignments 1–3):
 - Frontend: React + Vite → Vercel
 - Backend: Node.js + Express → Railway
-- Database: PostgreSQL (10 tables, ACID transactions)
+- Database: PostgreSQL (ACID transactions)
 
 ---
 
@@ -84,15 +86,5 @@ payback/
 | Problem | After group trips, no one knows who owes what |
 | Riskiest assumption | Users will trust automated calculations over manual tracking |
 | Hypothesis | If we show minimum transfers automatically, users will settle debts faster |
-| What MVP is NOT | No Kaspi QR, no notifications, no history, no persistent DB |
+| What MVP is NOT | No Kaspi QR, no notifications, no history |
 | How to test | Do users complete the expense → balance flow without confusion? |
-
----
-
-## Tech Debt Introduced
-
-- No persistent storage (data lost on server restart)
-- No input sanitization beyond basic validation
-- Equal split only (no % or custom amount in prototype)
-
-These are acceptable for MVP — the goal is to test the hypothesis, not build the full product.

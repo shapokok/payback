@@ -1,4 +1,15 @@
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: payback
+      POSTGRES_USER: payback
+      POSTGRES_PASSWORD: payback_secret
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -7,6 +18,9 @@ services:
     environment:
       - PORT=3001
       - JWT_SECRET=${JWT_SECRET:-payback-secret-change-in-production}
+      - DATABASE_URL=postgresql://payback:payback_secret@db:5432/payback
+    depends_on:
+      - db
     restart: unless-stopped
 
   frontend:
@@ -17,3 +31,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  pgdata:
