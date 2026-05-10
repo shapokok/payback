@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(node --check index.js)",
-      "Bash(node /Users/shapok/Documents/files/scripts/perf-test.js)"
-    ]
-  }
-}
