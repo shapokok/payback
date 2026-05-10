@@ -1,0 +1,36 @@
+[
+  {
+    "name": "maxNumericValue",
+    "expected": 3000,
+    "actual": 3110.1727000000005,
+    "values": [
+      3223.1848,
+      3161.0342,
+      3110.1727000000005
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditId": "first-contentful-paint",
+    "level": "warn",
+    "url": "http://localhost:3000/",
+    "auditTitle": "First Contentful Paint",
+    "auditDocumentationLink": "https://developer.chrome.com/docs/lighthouse/performance/first-contentful-paint/"
+  },
+  {
+    "name": "maxNumericValue",
+    "expected": 3000,
+    "actual": 3110.172700000001,
+    "values": [
+      3223.1848,
+      3161.0342,
+      3110.172700000001
+    ],
+    "operator": "<=",
+    "passed": false,
+    "auditId": "interactive",
+    "level": "warn",
+    "url": "http://localhost:3000/",
+    "auditTitle": "Time to Interactive",
+    "auditDocumentationLink": "https://developer.chrome.com/docs/lighthouse/performance/interactive/"
+  }
+]

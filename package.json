@@ -1,0 +1,12 @@
+{
+  "name": "payback",
+  "version": "1.0.0",
+  "description": "Shared expense tracker",
+  "private": true,
+  "scripts": {
+    "test:lighthouse": "lhci autorun"
+  },
+  "devDependencies": {
+    "@lhci/cli": "^0.14.0"
+  }
+}
