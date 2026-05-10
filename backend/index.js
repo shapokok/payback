@@ -114,8 +114,13 @@ function simplifyDebts(memberIds, rows) {
   const net = {};
   memberIds.forEach(id => { net[id] = 0; });
 
-  rows.forEach(({ paid_by, amount, user_id, amount_owed }) => {
-    net[paid_by] = (net[paid_by] || 0) + parseFloat(amount);
+  // Group by expense_id to add payer credit only once per expense
+  const seenExpenses = new Set();
+  rows.forEach(({ paid_by, amount, user_id, amount_owed, expense_id }) => {
+    if (!seenExpenses.has(expense_id)) {
+      net[paid_by] = (net[paid_by] || 0) + parseFloat(amount);
+      seenExpenses.add(expense_id);
+    }
     net[user_id] = (net[user_id] || 0) - parseFloat(amount_owed);
   });
 
@@ -259,9 +264,14 @@ app.get('/groups/:id', async (req, res) => {
         e.title,
         e.amount,
         e.category,
+        e.split_type as "split_type",
         e.paid_by as "paidBy",
         COALESCE((SELECT name FROM users WHERE id::text = e.paid_by), e.paid_by) as "paidByName",
-        json_agg(es.user_id) as "splitBetween"
+        json_agg(json_build_object(
+          'userId', es.user_id,
+          'amountOwed', es.amount_owed,
+          'name', COALESCE((SELECT name FROM users WHERE id::text = es.user_id), es.user_id)
+        )) as "splits"
       FROM expenses e
       LEFT JOIN expense_splits es ON es.expense_id = e.id
       WHERE e.group_id = $1
@@ -273,7 +283,11 @@ app.get('/groups/:id', async (req, res) => {
     const expenses = expensesResult.rows.map(exp => ({
       ...exp,
       amount: parseFloat(exp.amount),
-      splitBetween: exp.splitBetween[0] === null ? [] : exp.splitBetween
+      splits: exp.splits[0]?.userId === null ? [] : exp.splits.map(s => ({
+        ...s,
+        amountOwed: parseFloat(s.amountOwed)
+      })),
+      splitBetween: exp.splits[0]?.userId === null ? [] : exp.splits.map(s => s.userId)
     }));
 
     res.json({ ...group, members, expenses });
@@ -296,10 +310,43 @@ app.get('/groups/:id/invite', async (req, res) => {
 });
 
 app.post('/groups/:id/expenses', async (req, res) => {
-  const { title, amount, paidBy, splitBetween, category } = req.body;
-  
-  if (!title || !amount || amount <= 0 || !paidBy || !splitBetween || splitBetween.length === 0) {
+  const { title, amount, paidBy, splitBetween, category, splitType = 'equal', splits } = req.body;
+
+  if (!title || !amount || amount <= 0 || !paidBy) {
     return res.status(400).json({ error: 'Invalid expense data' });
+  }
+
+  const totalAmount = parseFloat(amount);
+
+  // Validate based on splitType
+  if (splitType === 'equal') {
+    if (!splitBetween || splitBetween.length === 0) {
+      return res.status(400).json({ error: 'splitBetween is required for equal split' });
+    }
+  } else if (splitType === 'percentage') {
+    if (!splits || splits.length === 0) {
+      return res.status(400).json({ error: 'splits is required for percentage split' });
+    }
+    const totalPct = splits.reduce((s, x) => s + parseFloat(x.percentage || 0), 0);
+    if (Math.abs(totalPct - 100) > 0.01) {
+      return res.status(400).json({ error: `Percentages must sum to 100 (got ${totalPct})` });
+    }
+    if (splits.some(x => parseFloat(x.percentage) <= 0)) {
+      return res.status(400).json({ error: 'Each percentage must be greater than 0' });
+    }
+  } else if (splitType === 'fixed') {
+    if (!splits || splits.length === 0) {
+      return res.status(400).json({ error: 'splits is required for fixed split' });
+    }
+    const totalFixed = splits.reduce((s, x) => s + parseFloat(x.amount || 0), 0);
+    if (Math.abs(totalFixed - totalAmount) > 0.01) {
+      return res.status(400).json({ error: `Fixed amounts must sum to ${totalAmount} (got ${totalFixed})` });
+    }
+    if (splits.some(x => parseFloat(x.amount) <= 0)) {
+      return res.status(400).json({ error: 'Each fixed amount must be greater than 0' });
+    }
+  } else {
+    return res.status(400).json({ error: 'splitType must be equal, percentage, or fixed' });
   }
 
   const client = await pool.connect();
@@ -319,21 +366,32 @@ app.post('/groups/:id/expenses', async (req, res) => {
     }
 
     const expResult = await client.query(
-      'INSERT INTO expenses (group_id, title, amount, paid_by, category) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.params.id, title, parseFloat(amount), String(paidBy), category || 'other']
+      'INSERT INTO expenses (group_id, title, amount, paid_by, category, split_type) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [req.params.id, title, totalAmount, String(paidBy), category || 'other', splitType]
     );
     const expense = expResult.rows[0];
 
-    const share = parseFloat(amount) / splitBetween.length;
-    for (const userId of splitBetween) {
+    // Compute splits and insert expense_splits rows
+    let splitRows = [];
+    if (splitType === 'equal') {
+      const share = totalAmount / splitBetween.length;
+      splitRows = splitBetween.map(userId => ({ userId: String(userId), amountOwed: share }));
+    } else if (splitType === 'percentage') {
+      splitRows = splits.map(x => ({ userId: String(x.userId), amountOwed: totalAmount * parseFloat(x.percentage) / 100 }));
+    } else if (splitType === 'fixed') {
+      splitRows = splits.map(x => ({ userId: String(x.userId), amountOwed: parseFloat(x.amount) }));
+    }
+
+    for (const row of splitRows) {
       await client.query(
         'INSERT INTO expense_splits (expense_id, user_id, amount_owed) VALUES ($1, $2, $3)',
-        [expense.id, String(userId), share]
+        [expense.id, row.userId, row.amountOwed]
       );
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ ...expense, amount: parseFloat(expense.amount), paidBy, splitBetween });
+    const responseSplits = splitRows.map(r => ({ userId: r.userId, amountOwed: r.amountOwed, name: r.userId }));
+    res.status(201).json({ ...expense, amount: parseFloat(expense.amount), split_type: splitType, paidBy, splitBetween: splitRows.map(r => r.userId), splits: responseSplits });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error(err);
@@ -355,7 +413,8 @@ app.get('/groups/:id/balances', async (req, res) => {
     // Получаем все сплиты. Мы используем COALESCE, чтобы получить имя плательщика, 
     // если он зарегистрирован, или его текстовый ID.
     const rows = await pool.query(
-      `SELECT 
+      `SELECT
+        e.id as expense_id,
         COALESCE(u.id::text, e.paid_by) as paid_by,
         e.amount,
         es.user_id,

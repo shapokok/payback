@@ -482,6 +482,71 @@
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: var(--bg); }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* SPLIT MODE SELECTOR */
+  .split-mode-tabs {
+    display: flex;
+    background: var(--surface2);
+    border-radius: 10px;
+    padding: 4px;
+    margin-bottom: 12px;
+    gap: 4px;
+  }
+
+  .split-mode-tab {
+    flex: 1;
+    padding: 7px 12px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text2);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .15s;
+  }
+
+  .split-mode-tab.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  /* SPLIT INPUTS (percentage / fixed) */
+  .split-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .split-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .split-input-label {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .split-input-field {
+    width: 90px;
+    flex: none;
+    text-align: right;
+    min-width: 0;
+  }
+
+  .split-total {
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+
+  .split-total.ok { color: var(--green); }
+  .split-total.err { color: var(--red); }
 </style>
 </head>
 <body>
@@ -502,6 +567,7 @@ let state = {
   groups: [],            // list of user's groups for the setup screen
   expenses: [],
   settled: new Set(),
+  balances: null,   // { net: {name: amount}, transfers: [{from, to, amount}] }
   alert: null,
   joinCode: null,
   joinGroupInfo: null,
@@ -702,12 +768,44 @@ function renderExpenses() {
           <option value="other">📦 Other</option>
         </select>
       </div>
-      <div class="card-title" style="margin-bottom:8px">Split between</div>
-      <div class="chips" id="splitChips">
-        ${state.group.members.map(m =>
-          `<div class="chip selected" data-member="${m.name}">${m.name}</div>`
-        ).join('')}
+      <div class="card-title" style="margin-bottom:8px">Split method</div>
+      <div class="split-mode-tabs">
+        <button class="split-mode-tab ${splitMode === 'equal' ? 'active' : ''}" data-split-mode="equal">Equal</button>
+        <button class="split-mode-tab ${splitMode === 'percentage' ? 'active' : ''}" data-split-mode="percentage">Percentage</button>
+        <button class="split-mode-tab ${splitMode === 'fixed' ? 'active' : ''}" data-split-mode="fixed">Fixed</button>
       </div>
+
+      ${splitMode === 'equal' ? `
+        <div class="card-title" style="margin-bottom:8px">Split between</div>
+        <div class="chips" id="splitChips">
+          ${state.group.members.map(m =>
+            `<div class="chip selected" data-member="${m.name}">${m.name}</div>`
+          ).join('')}
+        </div>
+      ` : splitMode === 'percentage' ? `
+        <div class="split-inputs" id="splitInputs">
+          ${state.group.members.map(m => `
+            <div class="split-input-row">
+              <span class="split-input-label">${m.name}</span>
+              <input class="split-input-field pct-input" type="number" min="0" max="100" placeholder="0"
+                data-member="${m.name}"/>
+              <span style="color:var(--text2);font-size:13px;width:16px">%</span>
+            </div>`).join('')}
+          <div class="split-total err" id="splitTotal">Total: 0% / 100%</div>
+        </div>
+      ` : `
+        <div class="split-inputs" id="splitInputs">
+          ${state.group.members.map(m => `
+            <div class="split-input-row">
+              <span class="split-input-label">${m.name}</span>
+              <input class="split-input-field fixed-input" type="number" min="0" placeholder="0"
+                data-member="${m.name}"/>
+              <span style="color:var(--text2);font-size:13px;width:16px">₸</span>
+            </div>`).join('')}
+          <div class="split-total err" id="splitTotal">Total: 0 ₸ / — ₸</div>
+        </div>
+      `}
+
       <div style="margin-top:16px">
         <button class="btn btn-primary" id="addExpenseBtn">Add Expense</button>
       </div>
@@ -728,6 +826,8 @@ function renderExpenses() {
               <div class="expense-meta">
                 Paid by <strong>${exp.paidByName || exp.paidBy}</strong> · Split: ${exp.splitBetween.join(', ')}
                 &nbsp;<span class="tag tag-${exp.category}">${exp.category}</span>
+                ${exp.split_type === 'percentage' ? '&nbsp;<span class="tag tag-other">% split</span>' : ''}
+                ${exp.split_type === 'fixed' ? '&nbsp;<span class="tag tag-other">fixed split</span>' : ''}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:10px">
@@ -739,19 +839,33 @@ function renderExpenses() {
 }
 
 function renderBalances() {
-  const { net, transfers } = simplifyDebts();
+  if (!state.balances) {
+    return `<div class="empty"><div class="empty-icon">⏳</div><div class="empty-title">Loading balances...</div></div>`;
+  }
+  const { net, transfers } = state.balances;
+  const memberNameById = {};
+  state.group.members.forEach(m => { memberNameById[m.id] = m.name; });
+  const displayNet = {};
+  Object.entries(net).forEach(([id, bal]) => {
+    displayNet[memberNameById[id] || id] = bal;
+  });
+  const displayTransfers = transfers.map(t => ({
+    from: memberNameById[t.from] || t.from,
+    to: memberNameById[t.to] || t.to,
+    amount: t.amount,
+  }));
   const activeExpenses = state.expenses.filter(e => !state.settled.has(e.id));
 
   return `
     <div class="section-header">
       <div class="section-title">Balances</div>
-      <div class="total-badge">${transfers.length} transfer${transfers.length !== 1 ? 's' : ''} needed</div>
+      <div class="total-badge">${displayTransfers.length} transfer${displayTransfers.length !== 1 ? 's' : ''} needed</div>
     </div>
 
     <div class="card">
       <div class="card-title">Net balance per person</div>
       <div class="net-grid">
-        ${Object.entries(net).map(([name, bal]) => `
+        ${Object.entries(displayNet).map(([name, bal]) => `
           <div class="net-card">
             <div class="net-name">${name}</div>
             <div class="net-amount ${bal > 0.01 ? 'positive' : bal < -0.01 ? 'negative' : 'zero'}">
@@ -764,7 +878,7 @@ function renderBalances() {
       </div>
     </div>
 
-    ${transfers.length === 0 ? `
+    ${displayTransfers.length === 0 ? `
       <div class="card">
         <div class="empty" style="padding:24px">
           <div class="empty-icon">✅</div>
@@ -773,8 +887,8 @@ function renderBalances() {
         </div>
       </div>` : `
       <div class="card">
-        <div class="card-title">Minimum transfers (${transfers.length})</div>
-        ${transfers.map(t => `
+        <div class="card-title">Minimum transfers (${displayTransfers.length})</div>
+        ${displayTransfers.map(t => `
           <div class="transfer-item">
             <div class="transfer-arrow">
               <span class="transfer-from">${t.from}</span>
@@ -791,14 +905,44 @@ function renderBalances() {
     ${activeExpenses.length > 0 ? `
       <div class="card">
         <div class="card-title">Expenses in calculation (${activeExpenses.length})</div>
-        ${activeExpenses.map(exp => `
-          <div class="expense-item">
-            <div class="expense-left">
-              <div class="expense-title">${exp.title}</div>
-              <div class="expense-meta">Paid by <strong>${exp.paidByName || exp.paidBy}</strong> · ${exp.amount.toLocaleString()} ₸</div>
+        ${activeExpenses.map(exp => {
+          const isOpen = expandedExpenses.has(exp.id);
+          const splits = exp.splits || [];
+          const memberNameById = {};
+          state.group.members.forEach(m => { memberNameById[m.id] = m.name; });
+          const splitsHtml = splits.map(s => {
+            const name = (s.name && s.name !== s.userId) ? s.name : (memberNameById[s.userId] || s.userId);
+            const isPayer = s.userId === exp.paidBy;
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:13px;color:var(--text2)">${name}${isPayer ? ' <span style="color:var(--accent);font-size:11px">(оплатил)</span>' : ''}</span>
+              <span style="font-family:'Space Mono',monospace;font-size:13px;color:${isPayer ? 'var(--green)' : 'var(--red)'}">
+                ${isPayer ? '+' : '-'}${parseFloat(s.amountOwed).toLocaleString()} ₸
+              </span>
+            </div>`;
+          }).join('');
+          return `<div class="expense-item" style="flex-direction:column;align-items:stretch;cursor:pointer" data-expand="${exp.id}">
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+              <div class="expense-left">
+                <div class="expense-title">${exp.title}</div>
+                <div class="expense-meta">Paid by <strong>${exp.paidByName || exp.paidBy}</strong> · ${exp.amount.toLocaleString()} ₸</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="tag tag-${exp.category}">${exp.category}</span>
+                ${exp.split_type !== 'equal' ? `<span class="tag tag-other">${exp.split_type === 'percentage' ? '% split' : 'fixed'}</span>` : ''}
+                <span style="color:var(--text2);font-size:14px;display:inline-block;transform:rotate(${isOpen ? '180' : '0'}deg);transition:transform .2s">▾</span>
+              </div>
             </div>
-            <span class="tag tag-${exp.category}">${exp.category}</span>
-          </div>`).join('')}
+            ${isOpen && splits.length > 0 ? `
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+                <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Разбивка</div>
+                ${splitsHtml}
+                <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:2px">
+                  <span style="font-size:12px;color:var(--text2)">Итого</span>
+                  <span style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700">${exp.amount.toLocaleString()} ₸</span>
+                </div>
+              </div>` : ''}
+          </div>`;
+        }).join('')}
       </div>` : ''}`;
 }
 
@@ -854,6 +998,10 @@ function renderMembers() {
       </div>
     </div>` : ''}`;
 }
+
+// ── SPLIT MODE ────────────────────────────────────────────────────────────────
+let splitMode = 'equal';
+let expandedExpenses = new Set();
 
 // ── HANDLERS ──────────────────────────────────────────────────────────────────
 let tempMembers = [];
@@ -1045,9 +1193,18 @@ function attachHandlers() {
 
   // ── Nav tabs ──────────────────────────────────────────────────────────────
   document.querySelectorAll('.nav-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       state.screen = btn.dataset.tab;
       state.alert = null;
+      if (btn.dataset.tab === 'balances') {
+        state.balances = null;
+        render();
+        try {
+          state.balances = await api('GET', `/groups/${state.group.id}/balances`);
+        } catch (err) {
+          showAlert('error', 'Failed to load balances');
+        }
+      }
       render();
     });
   });
@@ -1064,10 +1221,42 @@ function attachHandlers() {
     }
   });
 
+  // ── Split mode tabs ───────────────────────────────────────────────────────
+  document.querySelectorAll('[data-split-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      splitMode = btn.dataset.splitMode;
+      render();
+    });
+  });
+
   // ── Split chips ───────────────────────────────────────────────────────────
   document.querySelectorAll('.chip').forEach(chip => {
     chip.addEventListener('click', () => chip.classList.toggle('selected'));
   });
+
+  // ── Live totals for percentage/fixed inputs ───────────────────────────────
+  function updateSplitTotal() {
+    const totalEl = document.getElementById('splitTotal');
+    if (!totalEl) return;
+    const amountVal = parseFloat(document.getElementById('expAmount')?.value) || 0;
+    if (splitMode === 'percentage') {
+      const sum = [...document.querySelectorAll('.pct-input')].reduce((s, i) => s + (parseFloat(i.value) || 0), 0);
+      const ok = Math.abs(sum - 100) < 0.01;
+      totalEl.textContent = `Total: ${sum}% / 100%`;
+      totalEl.className = `split-total ${ok ? 'ok' : 'err'}`;
+    } else if (splitMode === 'fixed') {
+      const sum = [...document.querySelectorAll('.fixed-input')].reduce((s, i) => s + (parseFloat(i.value) || 0), 0);
+      const ok = amountVal > 0 && Math.abs(sum - amountVal) < 0.01;
+      totalEl.textContent = `Total: ${sum.toLocaleString()} ₸ / ${amountVal > 0 ? amountVal.toLocaleString() : '—'} ₸`;
+      totalEl.className = `split-total ${ok ? 'ok' : 'err'}`;
+    }
+  }
+
+  document.querySelectorAll('.pct-input, .fixed-input').forEach(inp => {
+    inp.addEventListener('input', updateSplitTotal);
+  });
+
+  document.getElementById('expAmount')?.addEventListener('input', updateSplitTotal);
 
   // ── Add expense ───────────────────────────────────────────────────────────
   document.getElementById('addExpenseBtn')?.addEventListener('click', async () => {
@@ -1075,18 +1264,40 @@ function attachHandlers() {
     const amount = parseFloat(document.getElementById('expAmount').value);
     const paidBy = document.getElementById('expPaidBy').value;
     const category = document.getElementById('expCategory').value;
-    const splitBetween = [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.member);
 
     if (!title) return showAlert('error', 'Please enter expense title');
     if (!amount || amount <= 0) return showAlert('error', 'Please enter a valid amount');
     if (!paidBy) return showAlert('error', 'Please select who paid');
-    if (splitBetween.length === 0) return showAlert('error', 'Select at least one person to split with');
+
+    let body = { title, amount, paidBy, category, splitType: splitMode };
+
+    if (splitMode === 'equal') {
+      const splitBetween = [...document.querySelectorAll('.chip.selected')].map(c => c.dataset.member);
+      if (splitBetween.length === 0) return showAlert('error', 'Select at least one person to split with');
+      body.splitBetween = splitBetween;
+    } else if (splitMode === 'percentage') {
+      const splits = [...document.querySelectorAll('.pct-input')]
+        .filter(i => parseFloat(i.value) > 0)
+        .map(i => ({ userId: i.dataset.member, percentage: parseFloat(i.value) }));
+      if (splits.length === 0) return showAlert('error', 'Enter percentages for at least one person');
+      const sum = splits.reduce((s, x) => s + x.percentage, 0);
+      if (Math.abs(sum - 100) > 0.01) return showAlert('error', `Percentages must sum to 100% (currently ${sum}%)`);
+      body.splits = splits;
+    } else if (splitMode === 'fixed') {
+      const splits = [...document.querySelectorAll('.fixed-input')]
+        .filter(i => parseFloat(i.value) > 0)
+        .map(i => ({ userId: i.dataset.member, amount: parseFloat(i.value) }));
+      if (splits.length === 0) return showAlert('error', 'Enter amounts for at least one person');
+      const sum = splits.reduce((s, x) => s + x.amount, 0);
+      if (Math.abs(sum - amount) > 0.01) return showAlert('error', `Fixed amounts must sum to ${amount.toLocaleString()} ₸ (currently ${sum.toLocaleString()} ₸)`);
+      body.splits = splits;
+    }
 
     try {
-      const expense = await api('POST', `/groups/${state.group.id}/expenses`, {
-        title, amount, paidBy, category, splitBetween,
-      });
+      const expense = await api('POST', `/groups/${state.group.id}/expenses`, body);
       state.expenses.push(expense);
+      state.balances = null;
+      splitMode = 'equal';
       showAlert('success', `"${title}" added — ${amount.toLocaleString()} ₸`);
       render();
     } catch (err) {
@@ -1094,13 +1305,25 @@ function attachHandlers() {
     }
   });
 
+  // ── Expand expense breakdown ──────────────────────────────────────────────
+  document.querySelectorAll('[data-expand]').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = row.dataset.expand;
+      if (expandedExpenses.has(id)) expandedExpenses.delete(id);
+      else expandedExpenses.add(id);
+      render();
+    });
+  });
+
   // ── Delete expense ────────────────────────────────────────────────────────
   document.querySelectorAll('[data-delete]').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       const id = btn.dataset.delete;
       try {
         await api('DELETE', `/groups/${state.group.id}/expenses/${id}`);
         state.expenses = state.expenses.filter(e => e.id !== id);
+        state.balances = null;
         render();
       } catch (err) {
         showAlert('error', err.message);
